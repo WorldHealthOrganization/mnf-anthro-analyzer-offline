@@ -1,8 +1,8 @@
 # WHO Anthro Survey Analyser (Microsoft Windows Application)
 
-Download Link:
+Download Link: https://github.com/WorldHealthOrganization/mnf-anthro-analyzer-offline/archive/refs/tags/v1.0.3.zip
 
-Online Version: 
+Online Version: https://worldhealthorg.shinyapps.io/anthro/
 
 ## About
 The Anthro Survey Analyser is a tool developed by the Department of Nutrition and Food Safety of the World Health Organization (WHO),that allows the user to perform comprehensive analysis of anthropometric survey data for children under 5 years of age based on weight and height. The analyses is based on the WHO Child Growth Standards.[^1] This version of the tool provides results for four of the anthropometric indexes: 
