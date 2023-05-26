@@ -9,6 +9,7 @@ The Anthro Survey Analyser is a tool developed by the Department of Nutrition an
 - weight-for-age
 - weight-for-height
 - body-mass-index-for-age.
+
 This tool is designed to build country capacity on data analysis and reporting on child malnutrition outcomes. It aims to enhance good practice in collecting survey data, analysing and reporting results.
 Users should read the manual (Quick Guide) before entering their data, as it contains a number of directions on data preparation for assuring analysis accuracy.
 
