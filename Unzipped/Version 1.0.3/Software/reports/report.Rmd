@@ -1,0 +1,717 @@
+---
+title: "SURVEY TITLE"
+author: 'AUTHOR'
+subtitle: "ADD SURVEY DETAILS - STUDY LOCATION, STUDY PERIOD, ETC"
+---
+ 
+Recommended citation:
+
+## Report template with results from WHO Anthro Survey Analyser
+
+Analysis date: `r Sys.time()`
+
+Link: https://whonutrition.shinyapps.io/anthro/
+
+```{r setup, cache=FALSE, message=FALSE, echo=FALSE, warning=FALSE, results='hide'}
+knitr::opts_chunk$set(cache=FALSE, message=FALSE, echo=FALSE, warning=FALSE, results='asis', fig.height=3)
+options(knitr.kable.NA = '')
+
+caption <- captioner::captioner()
+# Create stratification variables for use in automated reporting
+other_grouping_name <- anthro_make_grouping_label(list_map_vars[['othergr']]())
+df_strat <-
+  tibble(
+   key = c('Age group', 'Sex', 'Residence type', 'Geographical region', 'Wealth quintile', 'Mother education', other_grouping_name),
+    value = c('age_group', list_map_vars[['sex']](), list_map_vars[['typeres']](), list_map_vars[['gregion']](), list_map_vars[['wealthq']](), list_map_vars[['mothered']](), list_map_vars[['othergr']]())
+  ) %>%
+  filter(!value %in% 'None')
+
+inc_progress()
+
+# check that all list_map_vars are part of the dataset
+# as list_map_vars are user supplied
+stopifnot(all(df_strat$value %in% colnames(df_filtered())))
+
+df_zscores <-
+  CalculateZScores(
+    data = df_filtered(),
+    sex = list_map_vars[['sex']](),
+    weight = list_map_vars[['weight']](),
+    lenhei = list_map_vars[['lenhei']](),
+    lenhei_unit = list_map_vars[['lenhei_unit']](),
+    oedema = list_map_vars[['oedema']]()
+  )
+
+inc_progress()
+
+# calculate the missing cases if cluster, strata or sw is set
+prev_missing_vals <- anthro_prev_excluded_cases(df_zscores, list_map_vars)
+prev_missing_values_names <- prev_missing_vals$missing_values_names
+prev_missing_value_counts <- prev_missing_vals$missing_value_counts
+    
+df_prevs <-
+  CalculatePrev(
+    data = df_zscores,
+    age.month = age_in_months(), age = list_map_vars[['age']](),
+    date_birth = list_map_vars[['date_birth']](), date_obs = list_map_vars[['date_obs']](),
+    sex = list_map_vars[['sex']](),
+    weight = list_map_vars[['weight']](), lenhei = list_map_vars[['lenhei']](),
+    lenhei_unit = list_map_vars[['lenhei_unit']](), sw = list_map_vars[['sw']](),
+    cluster = list_map_vars[['cluster']](), strata = list_map_vars[['strata']](),
+    typeres = list_map_vars[['typeres']](), gregion = list_map_vars[['gregion']](),
+    wealthq = list_map_vars[['wealthq']](), mothered = list_map_vars[['mothered']](),
+    othergr = list_map_vars[['othergr']](), 
+    oedema = list_map_vars[['oedema']]()
+  )
+
+```
+
+# Overall survey results summary
+
+## Outcome plots
+
+```{r, fig.pos='!htbp', fig.fullwidth = TRUE, fig.cap='Nutritional status by stratification variable' %>% caption('a', .), fig.height=8, fig.width=12, fig.align='center', out.extra='angle=270', dpi=600}
+inc_progress()
+name_var <-
+  str_c(rep(c("Stunting", "Wasting", 'Severe wasting', "Overweight", 'Obesity', "Underweight"), each = 3), c('_r', '_ll', '_ul'))
+
+select_var <-
+  c(
+    str_c(
+      rep('HA_2', each = 3),
+      c('_r', '_ll', '_ul')
+    ),
+    str_c(
+      rep('WH', each = 3),
+      rep(c('_2', '_3'), each = 3),
+      c('_r', '_ll', '_ul')
+    ),
+    str_c(
+      rep('WH', each = 3),
+      rep(c('2', '3'), each = 3),
+      c('_r', '_ll', '_ul')
+    ),
+    str_c(
+      rep('WA_2', each = 3),
+      c('_r', '_ll', '_ul')
+    )
+  )
+
+tmp <-
+  df_prevs %>% 
+  filter(str_detect(Group, c('All|Age group|Sex|Area|Wealth quintile'))) %>%
+  select(Group, one_of(select_var)) %>%
+  set_names(c('key', name_var)) %>% 
+  gather(outcome, prop, -key) %>% 
+  mutate(
+    prop = prop %>% as.numeric(),
+    key = key %>% fct_inorder(),
+    z = str_replace_all(outcome, c('.*_r' = 'estimate', '.*_ll' = 'lower', '.*_ul' = 'upper')),
+    outcome = str_replace_all(outcome, '_.*', '') %>% fct_inorder()
+  ) %>% 
+  spread(key = z, value = prop)
+
+p <- 
+  tmp %>% 
+  filter(!str_detect(key, 'All')) %>% 
+  full_join(tmp %>% filter(str_detect(key, 'All')) %>% select(-key), by = 'outcome') %>% 
+  filter(outcome != 'Obesity') %>%  # exclude obesity in plot
+  mutate(legend = 'Total /n (95% CI)') %>% 
+  ggplot() +
+  aes(x = key %>% fct_rev) +
+  geom_pointrange(aes(y = estimate.x, ymin = lower.x, ymax = upper.x), fatten = 2) +
+  geom_hline(aes(yintercept = estimate.y, colour = 'Total \n (95% CI)'), alpha = .5, linetype = 'dashed') +
+  geom_ribbon(aes(ymin = lower.y, ymax = upper.y, fill = 'Total \n (95% CI)'), group = 1, alpha = .25) +
+  scale_colour_manual('', breaks = c("Total (95% CI)"), values = c("black")) +
+  scale_fill_manual('', breaks = c("Total (95% CI)"), values = c("grey75")) +
+  guides(colour = guide_legend(nrow = 2)) +
+  coord_flip() +
+  expand_limits(y = 0) +
+  labs(x = '', y = 'Proportion (%)') +
+  facet_grid(~ outcome, scales = 'free') +
+  hrbrthemes::theme_ipsum(grid = 'XY', base_family = 'Palatino', base_size = 9, axis_title_size = 10, axis_title_face = 'bold', strip_text_size = 11, strip_text_face = 'bold') +
+  theme(legend.position = 'bottom')
+
+p %>% print
+```
+
+\clearpage
+
+# Summary on survey description
+
+```{r calculations}
+inc_progress()
+data_collect_start <-
+  if(list_map_vars[['date_obs']]() != 'None') {
+    tmp <- df_zscores[[list_map_vars[['date_obs']]()]] %>% min(na.rm = TRUE)
+    str_c(day(tmp), month(tmp, label = TRUE), year(tmp), sep = ' ')
+  } else {
+    'unknown'
+  }
+
+data_collect_end <-
+  if(list_map_vars[['date_obs']]() != 'None') {
+    tmp <- df_zscores[[list_map_vars[['date_obs']]()]] %>% max(na.rm = TRUE)
+    str_c(day(tmp), month(tmp, label = TRUE), year(tmp), sep = ' ')
+  } else {
+    'unknown'
+  }
+
+# Raw numbers
+df_eligible <- df_zscores
+eligible_total <- df_eligible %>% nrow()
+eligible_height <- 
+  df_eligible %>% filter_(interp(~ x > 0, x = as.name(list_map_vars[['lenhei']]()))) %>% nrow()
+eligible_weight <- 
+  df_eligible %>% filter_(interp(~ x > 0, x = as.name(list_map_vars[['weight']]()))) %>% nrow()
+eligible_height_text <- str_c(eligible_height, ' (', (eligible_height/eligible_total*100) %>% round(1), '%)')
+eligible_weight_text <- str_c(eligible_weight, ' (', (eligible_weight/eligible_total*100) %>% round(1), '%)')
+
+# Oedema
+oedema_n <- 
+  ifelse(
+    list_map_vars[['oedema']]() == 'None', 'None', 
+    df_zscores %>% 
+      group_by_(list_map_vars[['oedema']]()) %>% 
+      tally %>% 
+      filter_(
+        interp(
+          ~ x %in% c('Y', 'y', '1', 1), 
+          x = as.name(list_map_vars[['oedema']]())
+        )
+      ) %>% 
+      extract2('n')
+  )
+
+is_oedema_mapped <- !is.na(oedema_n) && length(oedema_n) == 1L && oedema_n > 0 && oedema_n != "None"
+
+# helper function for later in the document
+print_oedema_note <- function(oedema_n) {
+  if (is_oedema_mapped && oedema_n > 0) {
+    cat("\nThere were ", oedema_n, " cases of bilateral oedema, for which weight-for-age and weight-for-height z-scores were considered as below -3 for prevalence calculation purposes.\n")
+  }
+}
+
+oedema_sentence <- 
+  ifelse(oedema_n == 'None', 'Information on oedema was not provided.', 
+         str_c('There were', oedema_n, 'cases of oedema reported.', sep = ' '))
+
+# Flags
+flag_available <- zscore_flag_cols
+
+flag_n <-
+  df_zscores %>%
+  summarise_at(vars(one_of(flag_available)), funs(sum(!is.na(.)))) %>%
+  gather(key, N)
+
+flag_sum <-
+  df_zscores %>%
+  summarise_at(vars(one_of(flag_available)), funs(sum(., na.rm = TRUE))) %>%
+  gather(key, n)
+
+df_flag <-
+  full_join(flag_n, flag_sum) %>%
+  mutate(
+    pretty_key = fct_recode(key, `length- or height-for-age` = 'zlen_flag', `weight-for-length or height` = 'zwfl_flag', `weight-for-age` = 'zwei_flag', `body mass index-for-age` = 'zbmi_flag') %>% as.character(),
+    prop = (n/N*100) %>% round(1)
+  )
+
+flag_sentence <-
+  str_c(
+    'There were ',
+    df_flag %>%
+      select(-key, -N) %>%
+      as.list %>%
+      pmap(function(pretty_key, n, prop) str_c(n, ' (', prop, '%) ', 'flags for ', pretty_key, sep = '')) %>%
+      str_c(collapse = ', '),
+    '.'
+  )
+
+# missing age
+# the missing age is computed by looking at the zscore age column
+# and relating that to the total number of records of the z_scores
+stopifnot('age_in_days' %in% colnames(df_zscores))
+ages <- as.numeric(df_filtered()[['age_in_days']])
+missing_age_n <- sum(is.na(ages))
+n_rows <- nrow(df_filtered())
+percent_format <- function(value) format(round(value / n_rows * 100, 1), digits = 1)
+missing_age_text <- paste0(if (missing_age_n == 1) 'was ' else 'were ',
+                           missing_age_n, ' (',
+                           percent_format(missing_age_n),
+                           '%) ',
+                           if (missing_age_n == 1) 'child' else 'children')
+no_negative_age <- sum(df_filtered()[['age_in_days']] < 0, na.rm = TRUE)
+negative_age_text <- if (no_negative_age > 0) {
+  paste0(" and ", no_negative_age,
+         " (" , percent_format(no_negative_age), "%) ",
+         if (no_negative_age == 1) "child" else "children", " with negative values for age")
+} else {
+  ""
+}
+
+sex_col <- list_map_vars[['sex']]()
+missing_sex_n <- sum(is.na(df_filtered()[[sex_col]]))
+missing_sex_text <- paste0(
+  if (missing_age_n == 1) 'was ' else 'were ',
+  missing_sex_n, ' (',
+  percent_format(missing_sex_n),
+  '%) ', ' ',
+  if (missing_age_n == 1) 'child' else 'children'
+)
+
+removed_due_to_age_text <- ""
+if (number_removed_due_to_age() > 0) {
+  n <- number_removed_due_to_age()
+  n_percent <- percent_format(n)
+  was <- if (n == 1) "was " else "were "
+  children <- if (n == 1) "child " else "children "
+  removed_due_to_age_text <- paste0(
+    "There ", was, " ", n,
+    " (", n_percent, "%) ", children,
+    " aged greater than sixty months who ", was,
+    " excluded from the analysis."
+  )
+}
+```
+
+## Sample size:
+The original sample was of `r nrow(df_raw())` children. There were `r eligible_total` children retained after filtering for [**INSERT DETAILS OF ANY FILTERING APPLIED**]; height measurements were obtained for `r eligible_height_text` children and weight measurements were obtained for `r eligible_weight_text`. There `r missing_sex_text` with missing information on sex and there `r missing_age_text` with missing age`r negative_age_text`.
+`r removed_due_to_age_text`
+`r oedema_sentence`
+
+```{r, echo = FALSE, results = 'asis'}
+walk2(prev_missing_values_names, prev_missing_value_counts, function(col, count) {
+  if (count > 0) {
+    cat('\\n')
+    child <- if (count == 1) "child" else "children"
+    was <- if (count == 1) "was" else "were"
+    cat(count, " ", child," had missing '", col,"' information and ", was," excluded from the prevalence calculations.")
+    cat('\\n')
+  }
+})
+```
+
+## Sample design:
+
+## Household listing (source or how was it done to update existing information)
+
+## Training of field staff: How many, how many teams, how many measurements per team per day
+
+## Standardization
+
+## Equipment and calibration
+
+## Data collection period
+
+Data collection: Start: [**enter month and year the survey started MM/YYYY**]; End: [**enter month and year the survey ended MM/YYYY**]
+
+## Data entry
+
+## Supervision
+
+# Other survey context important for the interpretation of results
+## Seasonality (e.g. harvest and malaria)
+## Climate conditions (e.g. monsoon, drought, natural catastrophes)
+## Epidemics, high mortality
+## Security issues, civil unrest
+## Population groups not covered (e.g. slums, refugees)
+
+# Summary of survey analysis
+## Data processing: Software …..
+
+## Data cleaning:
+## Imputations:
+
+# Data quality indicators and assessment
+## Flags:
+
+Flags were calculated as follows:...
+
+`r flag_sentence`
+
+## Missing data
+```{r missing_data, fig.cap="Missing data" %>% caption('b', .), fig.pos='!htbp', fig.fullwidth = F, fig.height=2.5, dpi=600}
+inc_progress()
+quality_vars <-
+  tibble(
+    key = c('Age', 'Weight (kg)', 'Length or height (cm)'), 
+    value = c('age_in_days', list_map_vars[['weight']](), list_map_vars[['lenhei']]())
+  ) %>%
+  bind_rows(df_strat) %>%
+  mutate(
+    key = fct_inorder(key)
+  ) %>%
+  filter(!value %in% c('None', 'age_group'))
+df_missing <-
+  df_zscores %>%
+  select(one_of(quality_vars$value)) %>%
+  mutate_all(funs(sum(is.na(.)))) %>%
+  gather(name, n) %>%
+  group_by(name) %>%
+  slice(1) %>%
+  full_join(quality_vars, by = c('name' = 'value')) %>%
+  ungroup %>%
+  mutate(
+    name = fct_relevel(name, unique(quality_vars$value)),
+    value = (n/nrow(df_zscores)*100) %>% round(1),
+    missing = str_c(n, ' (', value, '%)')
+  ) %>%
+  arrange(name) %>%
+  select(key, everything())
+
+max_plot_val <- max(df_missing$value)
+p <- df_missing %>%
+  ggplot(aes(x = fct_rev(key), y = value)) +
+  ggalt::geom_lollipop(point.size = .5, size = .25) +
+  geom_text(aes(label = str_c(value, '%', ' (', n, ')')), 
+            nudge_y = max_plot_val*0.1, size = 1.5, fontface = 'bold') +
+  coord_flip() +
+  labs(x = 'Variable', y = 'Proportion missing (%)') +
+  hrbrthemes::theme_ipsum(base_family = 'Palatino', grid = "", base_size = 6, axis_title_size = 6)
+
+if (max_plot_val <= 0.0001) {
+  p <- p + scale_y_continuous(limits = c(0, 0.1))
+}
+p
+```
+
+## Digit heaping charts (with mapping variable labels)
+```{r digit_pref, fig.cap="Digit preference for weight \\& height measurements" %>% caption('c', .), fig.pos='!htbp', fig.fullwidth = TRUE, fig.height=3, dpi=600}
+inc_progress()
+# Digit preference for weight and height
+digit_preference <-
+  df_zscores %>%
+  select(!!list_map_vars[['weight']](), !!list_map_vars[['lenhei']]()) %>%
+  mutate_all(round, digits = 1) %>%
+  mutate_all(funs(as.character)) %>%
+  mutate_all(funs(ifelse(str_detect(., '\\.') %in% FALSE, paste0(., '.0'), .))) %>%
+  mutate_all(str_extract, pattern = "\\..*") %>%
+  mutate_all(funs(ifelse(is.na(.), NA_character_, paste0("0", .)))) %>%
+  gather() %>%
+  mutate(key = fct_inorder(key)) %>%
+  group_by(key, value) %>%
+  tally %>%
+  group_by(key) %>%
+  filter(!is.na(value)) %>%
+  mutate(prop = (n/sum(n)*100) %>% round(1))
+
+digit_preference$pretty_key <-
+  factor(digit_preference$key, labels = c('Weight (kg)', 'Length or height (cm)'))
+
+digit_preference %>%
+  ggplot(aes(x = value %>% fct_rev, y = prop)) +
+  ggalt::geom_lollipop(point.size = .5, size = .25) +
+  coord_flip() +
+  geom_text(aes(label = str_c(prop, '%')), 
+            nudge_y = max(digit_preference$prop)*0.05, size = 1.5, fontface = 'bold') +
+  facet_wrap(~ pretty_key, nrow = 2) +
+  labs(x = 'Digit', y = 'Proportion (%)') +
+  hrbrthemes::theme_ipsum(
+    base_family = 'Palatino', grid = "", base_size = 7, axis_title_size = 7, axis_text_size = 5, strip_text_size = 5
+  ) +
+  theme(
+    panel.spacing.x = unit(.04, 'cm'),
+    panel.spacing.y = unit(.02, 'cm')
+  )
+```
+
+\clearpage
+
+## Z-score distribution issues
+```{r zscore_density_age, fig.pos='!htbp', fig.fullwidth = T, fig.height = 4.5, fig.cap='Z-score distributions by age group' %>% caption('d', .), dpi=600}
+# Z-score density plots
+df_zscore_dist <-
+  df_zscores %>%
+  select(one_of(df_strat$value), one_of(flag_available)-1) %>%
+  mutate_at(df_strat$value, funs(as.factor(.))) %>%
+  gather(key, value, -tidyselect::one_of(df_strat$value)) %>%
+  filter(!is.na(value)) %>% 
+  mutate(key = fct_relevel(key, 'zlen', 'zwfl', 'zwei', 'zbmi')) %>%
+  mutate(key = fct_recode(key, `Length- or height-for-age` = 'zlen', `Weight-for-length or height` = 'zwfl', `Weight-for-age` = 'zwei', `Body mass index-for-age` = 'zbmi'))
+
+indx <- df_zscore_dist %>% names() %>% match(df_strat$value, nomatch = 0)
+df_zscore_dist %<>% rename_at(names(.)[indx != 0], ~ df_strat$key[indx])
+
+if(!is.null(df_zscore_dist$Sex)) {
+  df_zscore_dist <- 
+    df_zscore_dist %>% 
+    mutate(
+      Sex = recode_sex_factor(Sex)
+    )
+}
+
+if(!is.null(df_zscore_dist[["Wealth quintile"]])) {
+  df_zscore_dist <- 
+    df_zscore_dist %>% 
+    mutate(
+      `Wealth quintile` = recode_wiq_factor(`Wealth quintile`)
+    )
+}
+
+# we do not show NA values in the stratification variable
+# similiar to the plot in the tool
+df_zscore_dist_age <- dplyr::filter(
+  df_zscore_dist,
+  !is.na(`Age group`)
+)
+
+p <- 
+  ggplot(df_zscore_dist_age) +
+  stat_density(aes(value, linetype = "Samples"), size = .25, geom = "line", position = "identity") +
+  anthro_ggplot2_standard_normal(linetype_as_aes = TRUE) +
+  facet_grid(`Age group` ~ key) +
+  xlim(-6, 6) +
+  labs(x = 'z-scores', y = 'Density') +
+  anthro_ggplot2_standard_normal_caption() +
+  hrbrthemes::theme_ipsum(
+    base_family = 'Palatino', 
+    grid = "", base_size = 6, caption_size = 3, axis_title_size = 6, strip_text_size = 5, axis_text_size = 4
+  ) +
+  theme(
+    panel.spacing.x = unit(.04, 'cm'),
+    panel.spacing.y = unit(.02, 'cm')
+  ) +
+  theme(legend.position = "bottom") +
+  anthro_scale_linetype_manual_no_groups
+
+p
+```
+
+\clearpage
+
+```{r zscore_density_sex, fig.pos='!htbp', fig.fullwidth = T, fig.cap='Z-score distributions by sex' %>% caption('e', .), dpi=600}
+inc_progress()
+p <-
+  ggplot(df_zscore_dist) +
+  stat_density(aes_string('value', linetype = 'Sex'), size = .25, geom = "line", position = "identity") +
+  anthro_ggplot2_standard_normal() +
+  facet_wrap(~ key, scales = 'free') +
+  xlim(-6, 6) +
+  labs(x = 'z-scores', y = 'Density', colour = df_strat$key[df_strat$value == 'Sex']) +
+  anthro_ggplot2_standard_normal_caption() +
+  hrbrthemes::theme_ipsum(
+    base_family = 'Palatino', 
+    grid = "", base_size = 6, caption_size = 3, axis_title_size = 6, strip_text_size = 5, axis_text_size = 4
+  ) +
+  theme(
+    legend.key = element_blank(),
+    legend.key.size = unit(.2, 'cm'), 
+    panel.spacing.x = unit(.04, 'cm'),
+    panel.spacing.y = unit(.02, 'cm')
+  )
+
+p
+```
+
+\clearpage
+
+```{r zscore_density_gregion, fig.pos='!htbp', fig.fullwidth = T, fig.height = 4.5, fig.cap='Z-score distributions by geographical region' %>% caption('f', .), dpi=600}
+inc_progress()
+if(!is.null(df_zscore_dist[["Geographical region"]])) {
+
+  ggplot(df_zscore_dist) +
+    stat_density(aes(value, linetype = "Samples"), size = .25, geom = "line", position = "identity") +
+    anthro_ggplot2_standard_normal(linetype_as_aes = TRUE) +
+    facet_grid(`Geographical region` ~ key) +
+    xlim(-6, 6) +
+    labs(x = 'z-scores', y = 'Density') +
+    hrbrthemes::theme_ipsum(
+      base_family = 'Palatino', 
+      grid = "", base_size = 6, caption_size = 3, axis_title_size = 6, strip_text_size = 5, axis_text_size = 4
+    ) +
+    theme(
+      panel.spacing.x = unit(.04, 'cm'),
+      panel.spacing.y = unit(.02, 'cm')
+    ) +
+    theme(legend.position = "bottom") +
+    anthro_scale_linetype_manual_no_groups
+}
+
+```
+
+\clearpage
+```{r zscore_violin, results=FALSE}
+inc_progress()
+# Z-score box/violin plots
+violin_groups <- 
+  df_strat %>% 
+  filter(key %in% c('Age group', 'Sex', 'Residence type', 'Wealth quintile')) %>% 
+  pull(key)
+
+ps <-
+  map(violin_groups, as.name) %>%
+  map(function(strat_var) {
+    strat_var_chr <- as.character(strat_var)
+    if (strat_var_chr == 'Wealth quintile') {
+      df_zscore_dist[[strat_var_chr]] <- recode_wiq_factor(df_zscore_dist[[strat_var_chr]])
+    }
+    ggplot(df_zscore_dist) +
+      aes(fct_rev(key), value, fill = !!strat_var) +
+      geom_violin(
+        size = .25, position = position_dodge(width = .9)
+      ) +
+      coord_flip() +
+      scale_fill_grey(start = .6, end = .9, na.value = "darkred") +
+      ylim(-6, 6) +
+      labs(x = "Z-score measure", y = "Z-score", colour = df_strat$key[df_strat$value == .]) +
+      hrbrthemes::theme_ipsum(
+        base_family = "Palatino",
+        grid = "", base_size = 6, axis_title_size = 6, strip_text_size = 5, axis_text_size = 4
+      ) +
+      theme(
+        legend.key = element_blank(),
+        legend.key.size = unit(.2, "cm")
+      )
+  })
+```
+
+```{r zscore_violin_age, fig.pos='!htbp', fig.fullwidth = TRUE, fig.height = 2.5, fig.cap=caption('g', 'z-score distribution violin plot by age group'), dpi=600}
+print(ps[[1]])
+```
+
+```{r zscore_violin_sex, fig.pos='!htbp', fig.fullwidth = TRUE, fig.height = 2.5, fig.cap=caption('h', 'z-score distribution violin plot by sex'), dpi=600}
+print(ps[[2]])
+```
+
+```{r zscore_violin_area, fig.pos='!htbp', fig.fullwidth = TRUE, fig.height = 2.5, fig.cap=caption('i', 'z-score distribution violin plot by residence type'), dpi=600}
+is_in_group <- 'Residence type' == violin_groups
+if (any(is_in_group)) {
+  print(ps[[which(is_in_group)]])
+}
+```
+
+```{r zscore_violin_wiq, fig.pos='!htbp', fig.fullwidth = TRUE, fig.height = 2.5, fig.cap=caption('j', 'z-score distribution violin plots by wealth quintile'), dpi=600}
+is_in_group <- 'Wealth quintile' == violin_groups
+if (any(is_in_group)) {
+  print(ps[[which(is_in_group)]])
+}
+```
+
+\clearpage
+
+# Appendix: Nutritional status tables
+
+\footnotesize
+```{r}
+inc_progress()
+
+to_NA <- function(x, y) {
+  y[is.na(x) | x == "NA"] <- NA_character_
+  y
+}
+f_num <- function(x, digits = 1) format(as.numeric(x), nsmall = digits)
+
+additional_oedema_col <- if (is_oedema_mapped) {
+  "Oedema_cases"
+} else {
+  NULL
+}
+
+# just in case the Oedema_cases column was not generated
+if (is_oedema_mapped && is.null(df_prevs[[additional_oedema_col]])) {
+  additional_oedema_col <- NULL
+}
+
+list_zscore <-
+  c('HA', 'WA') %>% 
+  map(function(x) {
+    df_prevs %>%
+      select(Group, starts_with(x), -matches('_se|[A-Z][0-9]|1_|_W'), !!! additional_oedema_col) %>%
+      mutate_at(
+        .vars = vars(matches('_pop|_r|_ll|_ul')), 
+        .funs = funs(as.numeric(.) %>% round(1))
+      ) %>% 
+      filter(!str_detect(Group, 'age_sex')) %>%
+      set_names(c('disaggregation', 'weighted', 'unweighted', 'r_3', 'll_3', 'ul_3', 'r_2', 'll_2', 'ul_2', 'r', 'll', 'ul', 'sd', additional_oedema_col)) %>%
+      mutate_at(
+        .vars = vars(weighted:ul), 
+        .funs = funs(round(as.numeric(.), 1))
+      ) %>%
+      mutate(unweighted = as.integer(unweighted),
+             sd = round(sd, 2)) %>% 
+      mutate(
+        `-3` = to_NA(weighted, str_c(f_num(r_3), ' (', f_num(ll_3), '; ', f_num(ul_3), ')')),
+        `-2` = to_NA(weighted, str_c(f_num(r_2), ' (', f_num(ll_2), '; ', f_num(ul_2), ')')),
+        mean = to_NA(weighted, str_c(f_num(r), ' (', f_num(ll), '; ', f_num(ul), ')'))
+      ) %>%
+      select(-matches('^r|^ll|^ul')) %>%
+      mutate_at(.vars = vars(weighted:unweighted), .funs = funs(as.numeric)) %>% 
+      mutate_at(.vars = vars(disaggregation), .funs = funs(str_trim)) %>% 
+      set_names(
+        c(
+          'Group', 'Weighted N', 'Unweighted N', 'z-score SD', additional_oedema_col,
+          '-3SD (95% CI)', '-2SD (95% CI)', 
+          'z-score mean (95% CI)'
+        )
+      ) %>% 
+      select(1:3, !!(if (is_oedema_mapped) 6:7 else 5:7), 4, !! (if (is_oedema_mapped) 5 else NULL))
+  }) %>%
+  set_names(c('Stunting (Height-for-age)', 'Weight-for-age'))
+
+weight_for_height <-
+  df_prevs %>%
+  select(
+    Group,
+    starts_with('WH'),
+    -matches('_se|1_|_W'),
+    !!! additional_oedema_col
+  ) %>%
+  filter(!str_detect(Group, 'age_sex')) %>%
+  set_names(
+    c(
+      'disaggregation', 'weighted', 'unweighted',
+      'r_3', 'll_3', 'ul_3',
+      'r_2', 'll_2', 'ul_2',
+      'r2', 'll2', 'ul2',
+      'r3', 'll3', 'ul3',
+      'r', 'll', 'ul', 'sd', additional_oedema_col
+    )
+  ) %>%
+  mutate_at(
+    .vars = vars(weighted:ul), 
+    .funs = funs(round(as.numeric(.), 1))
+  ) %>%
+  mutate(unweighted = as.integer(unweighted),
+       sd = round(sd, 2)) %>% 
+  mutate(
+    `-3` = to_NA(weighted, str_c(f_num(r_3), ' (', f_num(ll_3), '; ', f_num(ul_3), ')')),
+    `-2` = to_NA(weighted, str_c(f_num(r_2), ' (', f_num(ll_2), '; ', f_num(ul_2), ')')),
+    `+2` = to_NA(weighted, str_c(f_num(r2), ' (', f_num(ll2), '; ', f_num(ul2), ')')),
+    `+3` = to_NA(weighted, str_c(f_num(r3), ' (', f_num(ll3), '; ', f_num(ul3), ')')),
+    mean = to_NA(weighted, str_c(f_num(r), ' (', f_num(ll), '; ', f_num(ul), ')'))
+  ) %>%
+  mutate_at(.vars = vars(weighted:unweighted), .funs = funs(as.numeric)) %>% 
+  mutate_at(.vars = vars(disaggregation), .funs = funs(str_trim)) %>% 
+  select(-matches('^r|^ll|^ul')) %>%
+  set_names(
+    c(
+      'Group', 'Weighted N', 'Unweighted N', 'z-score SD', additional_oedema_col,
+      '-3SD (95% CI)', '-2SD (95% CI)',
+      '+2SD (95% CI)', '+3SD (95% CI)', 
+      'z-score mean (95% CI)'
+    )
+  ) %>%
+  select(1:3, !!(if (is_oedema_mapped) 6:9 else 5:9), 4, !! (if (is_oedema_mapped) 5 else NULL)) %>%
+  list %>%
+  set_names('Weight-for-height')
+
+list_zscore %<>% c(weight_for_height)
+
+# remove the Oedema_cases column for height for age if oedema is mapped
+# as the oedema information is only relevant for Weight-for-age and Weight-for-height
+if (is_oedema_mapped && !is.null(list_zscore[[1]][["Oedema_cases"]])) {
+  list_zscore[[1]][["Oedema_cases"]] <- NULL
+}
+cat('\n')
+knitr::kable(list_zscore[[1]], caption = 'Height-for-age',booktabs = TRUE, align = c('l', 'r', rep('r', ncol(list_zscore[[1]])-1)))
+
+cat('\\clearpage')
+cat('\n')
+knitr::kable(list_zscore[[2]], caption = 'Weight-for-age', booktabs = TRUE, align = c('l', 'r', rep('r', ncol(list_zscore[[2]])-1)))
+print_oedema_note(oedema_n)
+
+cat('\\clearpage')
+cat('\n')
+knitr::kable(list_zscore[[3]], caption = 'Weight-for-height', booktabs = TRUE, align = c('l', 'r', rep('r', ncol(list_zscore[[3]])-1)))
+print_oedema_note(oedema_n)
+```
