@@ -33,6 +33,7 @@ For any queries or comments, please contact the Anthro Tool team at **anthro2005
 
 ## Acknowledgments
 The WHO Anthro Survey Analyser was built up from the WHO R macro developed by Elaine Borghi, from the Growth Monitoring and Assessment Unit, Department of Nutrition for Health and Development, WHO, Geneva. Monika Blössner and Elaine Borghi worked on the conceptualization, design and content of the application. The tool builds on the concepts from the Anthro Software, Nutrition Survey module. The first prototype of the online application based on R and Shiny R package was developed by the consultant firm Epidemos (Jonathan Polonsky as focal point), followed by important enhancements and data validation checks by the consultant Dirk Schumacher.
+The development of the WHO Anthro Survey Analyser was fully funded by the Bill and Melinda Gates Foundation.
 
 ## References
 [^1]: WHO Multicentre Growth Reference Study Group. WHO child growth standards. Length, height for-age, weight-for-age, weight-for-length and body mass index-for age. Methods and development. Geneva: World Health Organization; 2006. Available at http://www.who.int/childgrowth/standards/Technical_report.pdf (Accessed 07 December 2017).
