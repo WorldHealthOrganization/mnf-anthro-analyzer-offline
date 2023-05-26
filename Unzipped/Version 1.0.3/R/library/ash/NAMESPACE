@@ -1,2 +1,0 @@
-useDynLib(ash)
-export(bin1,bin2,ash1,ash2)
