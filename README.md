@@ -28,6 +28,7 @@ Warning: you must have a browser installed on your device to run the offline app
 - Unzip the folder to your desired location
 - Open the unzipped folder containing the offline Anthro Windows app
 - Run the `Start_Anthro.bat` file by double-clicking it
+
 Congratulations! The offline Anthro Windows app should now be running on your default browser.
 For any queries or comments, please contact the Anthro Tool team at **anthro2005@who.int**.
 
