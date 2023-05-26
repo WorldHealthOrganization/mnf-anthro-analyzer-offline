@@ -1,0 +1,27 @@
+GeomCartogram           Geom Cartogram
+annotate_textp          Text annotations in plot coordinate system
+byte_format             Bytes formatter: convert to byte measurement
+                        and display symbol.
+coord_proj              Similar to 'coord_map' but uses the PROJ.4
+                        library/package for projection transformation
+fortify.table           Fortify contingency tables
+geom_bkde               Display a smooth density estimate.
+geom_bkde2d             Contours from a 2d density estimate.
+geom_cartogram          Map polygons layer enabling the display of show
+                        statistical information
+geom_dumbbell           Dumbell charts
+geom_encircle           Automatically enclose points in a polygon
+geom_lollipop           Lollipop charts
+geom_stateface          Use ProPublica's StateFace font in ggplot2
+                        plots
+geom_xspline            Connect control points/observations with an
+                        X-spline
+geom_xspline2           Alternative implemenation for connecting
+                        control points/observations with an X-spline
+ggalt                   Extra Geoms, Stats, Coords, Scales & Fonts for
+                        'ggplot2'
+load_stateface          Load stateface font
+show_stateface          Show location of StateFace font
+stat_ash                Compute and display a univariate averaged
+                        shifted histogram (polynomial kernel)
+stat_stepribbon         Step ribbon statistic
